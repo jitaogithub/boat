@@ -5,8 +5,62 @@ A fault-tolerant prediction serving system based on Clipper and Raft
 This project is named after the object category that contains both rafts and clippers.
 
 ## Setup
-**Clipper**  
-`pip install git+https://github.com/ucbrise/clipper.git@develop#subdirectory=clipper_admin`
+### Prerequisites  
+In this setup guide, we assume you have met the following prerequisites. While other versions might work as well, these are what we test Boat on, thus provide best luck. We also assume that your `pwd` is the root of this repository.
+- Ubuntu 18.04.2 LTS (Windows doesn't do)
+- Python 3.6.3 (with python3-pip installed)
+- Docker 18.09 (current user must be able to execute `docker` command without `sudo`)
+### Dependencies
+**PyPI Packages**  
+See [requirements.txt](https://github.com/jitaogithub/boat/blob/master/requirements.txt). Can be installed in batch with:  
+`sudo pip3 install -r requirements.txt`
 
-**raftos**  
-There is no need to install raftos. This repository contains a modified version.
+**Clipper**  
+You can either copy the `clipper_admin` folder into `./` from [Clipper's GitHub repository](https://github.com/ucbrise/clipper) or install with a single command:  
+`sudo pip3 install git+https://github.com/ucbrise/clipper.git@develop#subdirectory=clipper_admin`
+
+**RaftOS**  
+There is no need to install RaftOS. This repository contains a modified version.
+
+## Quickstart
+To start, simply execute:
+
+`python3 deploy.py`
+
+The first run might take several minutes. 
+
+By default, this will run three Boat instances. Each Boat instance has a frontend that provides API for users to manipulate:
+
+`curl -X GET 127.0.0.1:8080` 
+
+Default ports are 8080, 8081 and 8082 for each instance respectively.
+
+This gives a greeting message in plain text. The API also allows checking the status of the instance:
+
+`curl -X GET 127.0.0.1:8080/status`
+
+The response will be a JSON string that looks like:
+
+`{ "is_leader": true }`
+
+`"is_leader"` tells whether this Boat instance is the Raft leader. In case you don't know about Raft, this is basically saying whether this instance can accept your predict request. You should always submit your request to the leader.
+
+To submit a predict request, simply POST to the leader (the instance listening to 8082 for example):
+
+`curl -X POST -d '{ "input": "Hello" }' --header "Content-Type:application/json" 127.0.0.1:8082/predict`
+
+By default, Boat runs a model that does nothing but echoes the input. However, the result will not be responded to you. In the console that runs Boat, you may see something like:
+
+```
+19-05-08:21:58:19 INFO     [boat.py:100] Boat 1: Request received from raft: {'time': '2019-05-08 21:58:19.668935', 'request': '{ "input": "Hello" }'}
+19-05-08:21:58:19 INFO     [boat.py:100] Boat 0: Request received from raft: {'time': '2019-05-08 21:58:19.668935', 'request': '{ "input": "Hello" }'}
+19-05-08:21:58:19 INFO     [boat.py:85] Boat 2: Request from API appended to state: {'time': '2019-05-08 21:58:19.668935', 'request': '{ "input": "Hello" }'}
+19-05-08:21:58:19 INFO     [boat.py:115] Boat 0: { "input": "Hello" } sent to clipper with status 200 and response:
+        {"query_id":0,"output":"b'Hello'","default":false}
+19-05-08:21:58:19 INFO     [boat.py:115] Boat 1: { "input": "Hello" } sent to clipper with status 200 and response:
+        {"query_id":0,"output":"b'Hello'","default":false}
+19-05-08:21:58:19 INFO     [boat.py:115] Boat 2: { "input": "Hello" } sent to clipper with status 200 and response:
+        {"query_id":0,"output":"b'Hello'","default":false}
+```
+
+To put it simple, the frontend of the leader replicates the request and synchronize with followers (first three lines). After that, the request is forwarded to the Clipper backend to get the response JSON string(last three lines).
