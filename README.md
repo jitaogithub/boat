@@ -65,5 +65,12 @@ By default, Boat runs a model that does nothing but echoes the input. However, t
 
 To put it simple, the frontend of the leader replicates the request and synchronize with followers (first three lines). After that, the request is forwarded to the Clipper backend to get the response JSON string(last three lines).
 
+To quit, send `ctrl-c` to the console. Boat will automatially clean up all the docker containers, networks and images that Clipper usually leaves. If this is somehow not aborted, manually execute:
+
+```shell
+chmod u+x reset.sh
+./reset.sh
+```
+
 ## Advanced Application
 Each module in Boat is highly cohesive. Clipper is essentially independent from Raft. To deploy complex models, you may modify `clipper.py` following the [documentation of Clipper](http://docs.clipper.ai/en/latest/model_deployers.html).
