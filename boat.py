@@ -110,7 +110,7 @@ class Boat:
                 async with session.post('http://127.0.0.1:{}/default/predict'.format(1337+self.node_id), 
                     headers={'Content-Type': 'application/json'}, data=r.encode()) as resp:
                     
-                    logging.info('Boat {}: {} sent to clipper with status {}\n\twith response:{}'.format(
+                    logging.info('Boat {}: {} sent to clipper with status {} and response:\n\t{}'.format(
                         self.node_id, r, resp.status, await resp.text()))
 
 
