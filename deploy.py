@@ -1,53 +1,71 @@
-import argparse, multiprocessing, logging, signal, os, datetime, functools
+import argparse, multiprocessing, logging, signal, os, datetime, subprocess
 
 from boat import Boat
 
-def sigterm_handler(self, signal, frame):
-        logging.info('Boat {}: SIGTERM received. Please wait for the cleanup to finish.'.format(self.node_id))
-        self.clipper.stop()
-        logging.info('Boat {}: Cleanup finished. Quitting.'.format(self.node_id))
-        exit(1)
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s [%(filename)s:%(lineno)d] %(message)s',
+    datefmt='%y-%m-%d:%H:%M:%S',
+    level=logging.INFO)
 
+logger = logging.getLogger(__name__)
+    
 # Entry point for every process
 def main(num_nodes, node_id, start_time):
     boat = Boat(num_nodes, node_id, start_time)
-    # Clipper must be explicitly killed or it will be left running
-    signal.signal(signal.SIGTERM, functools.partial(sigterm_handler, boat))
     boat.run()
 
 if __name__ == "__main__":
-    # signal.signal(signal.SIGINT, sigint_handler)
 
     parser = argparse.ArgumentParser()
     parser.add_argument('-n', '--num_nodes', type=int, default=3)
     args = parser.parse_args()
+
+    # Start Clipper with a separate Python script, or Clipper does not work properly
+    logging.info('Main Process: Starting Clipper ...')
+    clipper_success = subprocess.call(['python3', 'clipper.py', '--num_nodes', str(args.num_nodes)])
+    if clipper_success == 0:
+        logging.info('Main Process: ... Clipper started.')
+    else:
+        logging.fatal('Main Process: Error occurred on Clipper startup. Cleaning up.')
+        subprocess.call(['sh', 'reset.sh'])
+        logging.info('Main Process: Cleanup finished. Bye-bye.')
+        exit(1)
 
     # Multiprocessing
     processes = set()
     try:
         start_time = datetime.datetime.now()
         for i in range(args.num_nodes):
+            logging.info('Main Process: Creating Boat {} ...'.format(i))
             p = multiprocessing.Process(target=main, args=(args.num_nodes, i, start_time))
-            logging.info('Main Process: Starting Boat {} ...'.format(i))
             p.start()
-            logging.info('Main Process: ... Process started.')
             processes.add(p)
+            logging.info('Main Process: ... Boat {} created and triggered.'.format(i))
  
         while processes:
-            for process in tuple(processes):
-                process.join()
-                processes.remove(process)
-  
+            for p in tuple(processes):
+                p.join()
+                processes.remove(p)
+
     # For any exception (including KeyboardInterrupt)
     finally:
         # Send SIGTERM to every process
-        for process in processes:
-            if process.is_alive():
-                logging.info('Main Process: Terminating Boat {}'.format(process))
-                process.terminate()
+        for p in processes:
+            if p.is_alive():
+                logging.info('Main Process: Terminating Boat {}. '.format(p))
+                p.terminate()
         
         # Wait for processes to finish the cleanup
         while processes:
-            for process in tuple(processes):
-                process.join()
-                processes.remove(process)
+            for p in tuple(processes):
+                p.join()
+                processes.remove(p) 
+
+        logging.info('Main Process: All boats terminated. Please wait for cleanup. This may take several minutes.')
+        cleanup_success = subprocess.call(['sh', 'reset.sh', str(args.num_nodes)])
+        if cleanup_success == 0:
+            logging.info('Main Process: Cleanup finished. Bye-bye.')
+        else:
+            logging.error('Main Process: Error occurred on cleanup. Bye-bye anyway.')
+        exit(0)
+        

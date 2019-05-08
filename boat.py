@@ -4,10 +4,10 @@ from datetime import datetime
 import base64
 import raftos
 import logging
+import aiohttp
 
 from rest_api import BoatAPI
 from atomic_queue import AtomicQueue
-from clipper import Clipper
 
 import os, multiprocessing
 
@@ -19,10 +19,10 @@ class Boat:
         self.start_time = start_time
 
         # Submitted requests via Rest API
-        # Inside: { 'time': str, 'request': str }
+        # self.api_queue -> [{'time': str, 'request': str}]
         self.api_queue = AtomicQueue()
         # Requests to send to Clipper
-        # Inside: str
+        # self.clipper_queue -> [str]
         self.clipper_queue = AtomicQueue()
 
         # Retrieve asyncio loop
@@ -44,18 +44,12 @@ class Boat:
             'on_receive_append_entries_callback': self.on_receive_append_entries_callback
         })
     
-        # Configure Clipper
-        self.clipper = Clipper(self.node_id)
-
         # Configure REST API
         self.rest_api = BoatAPI(self, '127.0.0.1', 8080+self.node_id)
 
 
     # Everything about async goes here
     def run(self):
-        # Start Clipper
-        self.clipper.run()
-
         # Schedule Rest API
         self.loop.create_task(self.rest_api.run(self.loop))
         
@@ -90,7 +84,7 @@ class Boat:
                     logging.info('Boat {}: Request from API appended to state: {}'.format(self.node_id, r))
                     await self.clipper_queue.enqueue_and_notify(r['request'])
                 except:
-                    print('Boat {}: Failed to append to state: {}'.format(self.node_id, r))
+                    logging.error('Boat {}: Failed to append to state: {}'.format(self.node_id, r))
         
         await raftos.wait_until_leader(self.raft_node)
     
@@ -106,16 +100,22 @@ class Boat:
             # Send to Clipper
             self.loop.create_task(self.clipper_queue.enqueue_and_notify(command['requests'][-1]['request']))
         else:
-            logging.info('Boat {}: Update from raft received with invalid format'.format(self.node_id))
+            logging.error('Boat {}: Update from raft received with invalid format'.format(self.node_id))
 
-
+    # Coroutine that gets from Clipper queue and send to Clipper
     async def clipper_feeder(self):
         while True:
             r = await self.clipper_queue.wait_and_dequeue()
-            await self.clipper.predict(r)
+            async with aiohttp.ClientSession() as session:
+                async with session.post('http://127.0.0.1:{}/default/predict'.format(1337+self.node_id), 
+                    headers={'Content-Type': 'application/json'}, data=r.encode()) as resp:
+                    
+                    logging.info('Boat {}: {} sent to clipper with status {}\n\twith response:{}'.format(
+                        self.node_id, r, resp.status, await resp.text()))
 
 
-    # API
+
+    # API handler
     async def post_predict(self, request):
         '''Put the incoming request into the queue with timestamp'''
         data_map = {
@@ -124,7 +124,7 @@ class Boat:
         }
         await self.api_queue.enqueue_and_notify(data_map)
 
-    # API
+    # API handler
     async def get_status(self):
         return { 'is_leader': raftos.get_leader() == self.raft_node }
         
