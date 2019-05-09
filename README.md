@@ -2,7 +2,9 @@
 A fault-tolerant prediction serving system based on Clipper and Raft
 
 ## Introduction
-This project is named after the object category that contains both rafts and clippers.
+Prediction serving systems for machine learning like [Clipper](https://clipper.ai) simplifies the deployment of machine learning models. However, most of them, if not all, do not guarantee high availability. The entire pipeline fails when one of the models crashes in the middle. 
+
+Boat leverages state machine replication (SMR) based on Raft to provide redundancy. Prediction requests are replicated so that when an instance of prediction serving system failes, the requests can be replayed so that the state of that instance can be restored. In this project, Clipper and a modified version of RaftOS is used. Boat is named after the object category that contains both rafts and clippers.
 
 ## Setup
 ### Prerequisites  
@@ -10,16 +12,22 @@ In this setup guide, we assume you have met the following prerequisites. While o
 - Ubuntu 18.04.2 LTS (Windows doesn't do)
 - Python 3.6.3 (with python3-pip installed)
 - Docker 18.09 (current user must be able to execute `docker` command without `sudo`)
+
 ### Dependencies
-**PyPI Packages**  
-See [requirements.txt](https://github.com/jitaogithub/boat/blob/master/requirements.txt). Can be installed in batch with:  
+**PyPI Packages**
+
+See [requirements.txt](https://github.com/jitaogithub/boat/blob/master/requirements.txt). Can be installed in batch with:
+
 `sudo pip3 install -r requirements.txt`
 
 **Clipper**  
-You can either copy the `clipper_admin` folder into `./` from [Clipper's GitHub repository](https://github.com/ucbrise/clipper) or install with a single command:  
+
+You can either copy the `clipper_admin` folder into `./` from [Clipper's GitHub repository](https://github.com/ucbrise/clipper) or install with a single command:
+
 `sudo pip3 install git+https://github.com/ucbrise/clipper.git@develop#subdirectory=clipper_admin`
 
 **RaftOS**  
+
 There is no need to install RaftOS. This repository contains a modified version.
 
 ## Quickstart
