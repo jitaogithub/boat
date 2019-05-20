@@ -21,13 +21,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Start Clipper with a separate Python script, or Clipper does not work properly
-    logging.info('Main Process: Starting Clipper ...')
-    clipper_success = subprocess.call(['python3', 'clipper.py', '--num_nodes', str(args.num_nodes)])
+    logging.info('Main Process: Starting Clipper instances ...')
+    clipper_success = 0
+    for i in range(args.num_nodes):
+        clipper_success += subprocess.call(['python3', 'clipper.py', str(i)])
     if clipper_success == 0:
-        logging.info('Main Process: ... Clipper started.')
+        logging.info('Main Process: ... Clipper instances started.')
     else:
         logging.fatal('Main Process: Error occurred on Clipper startup. Cleaning up.')
-        subprocess.call(['sh', 'reset.sh'])
+        for i in range(args.num_nodes):
+            subprocess.call(['sh', 'reset.sh', str(i)])
         logging.info('Main Process: Cleanup finished. Bye-bye.')
         exit(1)
 
@@ -62,7 +65,9 @@ if __name__ == "__main__":
                 processes.remove(p) 
 
         logging.info('Main Process: All boats terminated. Please wait for cleanup. This may take several minutes.')
-        cleanup_success = subprocess.call(['sh', 'reset.sh', str(args.num_nodes)])
+        cleanup_success = 0
+        for i in range(args.num_nodes):
+            cleanup_success += subprocess.call(['sh', 'reset.sh', str(i)])
         if cleanup_success == 0:
             logging.info('Main Process: Cleanup finished. Bye-bye.')
         else:

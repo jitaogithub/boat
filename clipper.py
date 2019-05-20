@@ -9,10 +9,14 @@ def echo_model(x):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-n', '--num_nodes', type=int, default=3)
+    # parser.add_argument('-n', '--num_nodes', type=int, default=3)
+    parser.add_argument('node_id', type=int)
     args = parser.parse_args()
 
-    clipper_conns = [ClipperConnection(DockerContainerManager(
+    # num_nodes = args.num_nodes
+    node_id = args.node_id
+
+    clipper_conn = ClipperConnection(DockerContainerManager(
         cluster_name='clipper_cluster_{}'.format(node_id),
         docker_ip_address='localhost',
         clipper_query_port=1337+node_id,
@@ -24,16 +28,16 @@ if __name__ == "__main__":
         # WARING: DO NOT CHANGE THE RULE OF NETWORK NAMES 
         docker_network='clipper_network_{}'.format(node_id),
         # SINCE THIS IS USED BY reset.sh TO IDENTIFY CLIPPER CONTAINERS
-        extra_container_kwargs={})) for node_id in range(args.num_nodes)]
+        extra_container_kwargs={})) # for node_id in range(args.num_nodes)]
 
-    for clipper_conn in clipper_conns:
-        try:
-            clipper_conn.start_clipper()
-            clipper_conn.register_application(name="default", input_type="string", default_output="", slo_micros=100000)
+    try:
+        clipper_conn.start_clipper()
+        clipper_conn.register_application(name="default", input_type="string", default_output="", slo_micros=100000)
 
-            python_deployer.deploy_python_closure(clipper_conn, name="echo-model", version=1, input_type="string", func=echo_model)
-            clipper_conn.link_model_to_app(app_name="default", model_name="echo-model")
-        except:
-            exit(1)
+        python_deployer.deploy_python_closure(clipper_conn, name="echo-model", version=1, input_type="string", func=echo_model)
+        clipper_conn.link_model_to_app(app_name="default", model_name="echo-model")
+    except:
+        exit(1)
+
     exit(0)
 
