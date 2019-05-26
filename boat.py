@@ -1,10 +1,11 @@
 
 import asyncio
 from datetime import datetime
-import base64
+import os
 import raftos
 import logging
 import aiohttp
+import json
 
 from rest_api import BoatAPI
 from atomic_queue import AtomicQueue
@@ -33,7 +34,7 @@ class Boat:
         self.raft_node = '127.0.0.1:{}'.format(8000+self.node_id)
         self.raft_cluster = ['127.0.0.1:{}'.format(8000+i) for i in range(num_nodes) if i != self.node_id]
 
-        timestamp = base64.b64encode(str(self.start_time).encode()).decode()
+        timestamp = start_time.strftime('%Y-%m-%d-%H-%M-%S')
         
         os.makedirs('./logs', exist_ok=True)
         os.makedirs('./logs/{}'.format(timestamp), exist_ok=True)
@@ -113,7 +114,9 @@ class Boat:
                     logging.info('Boat {}: {} sent to clipper with status {} and response:\n\t{}'.format(
                         self.node_id, r, resp.status, await resp.text()))
 
-
+    # API handler
+    async def get_status(self):
+        return { 'is_leader': raftos.get_leader() == self.raft_node }
 
     # API handler
     async def post_predict(self, request):
@@ -122,9 +125,15 @@ class Boat:
             'time': str(datetime.now()),
             'request': request
         }
-        await self.api_queue.enqueue_and_notify(data_map)
+        await self.api_queue.enqueue_and_notify(data_map)        
 
     # API handler
-    async def get_status(self):
-        return { 'is_leader': raftos.get_leader() == self.raft_node }
+    async def post_control(self, request):
+        '''React to the control message'''
+        req_dict = json.loads(request)
+        if 'cmd' in req_dict:
+            if req_dict['cmd'] == 'exit':
+                logging.info('Boat {}: Exit command received. Killing myself.'.format(self.node_id))
+                os.kill(os.getpid(), 9)
+        raise Exception()
         

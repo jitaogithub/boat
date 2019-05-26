@@ -20,7 +20,14 @@ class BoatAPI:
                 request_string = await request.text()
                 await self.boat.post_predict(request_string)
                 return web.Response()
-        
+        elif request.rel_url.path == '/control':
+            if request.method == 'POST' and request.body_exists and request.can_read_body:
+                request_string = await request.text()
+                try:
+                    await self.boat.post_control(request_string)
+                except:
+                    return web.Response(status=400)
+                return web.Response()
         return web.Response(status=400)
 
     async def run(self, loop):

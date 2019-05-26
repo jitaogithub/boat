@@ -28,6 +28,7 @@ class BoatCluster:
                 # Clean up failed boat
                 logging.info('Main Process: Boat {} is failed. Cleaning up ...'.format(i))
                 self.processes[i].join()
+                self.processes.pop(i)
                 subprocess.call(['sh', 'reset.sh', str(i)])
                 
                 # Restart Clipper
@@ -38,9 +39,15 @@ class BoatCluster:
                     logging.error('Main Process: ... Error occurred when starting the Clipper instance. Please do it manually. A process for boat {} will be created anyway.'.format(i))
 
                 # Restart boat process
-                logging.info('Main Process: Creating Boat {} ...'.format(i))
-                self.processes[i] = multiprocessing.Process(target=self.main, args=(i,))
-                logging.info('Main Process: ... Boat {} created and triggered.'.format(i))
+                try:
+                    logging.info('Main Process: Creating Boat {} ...'.format(i))
+                    p = multiprocessing.Process(target=self.main, args=(i,))
+                    p.start()
+                    self.processes.insert(i, p)
+                    logging.info('Main Process: ... Boat {} re-created and re-triggered.'.format(i))
+                except:
+                    logging.fatal('Main Process: Error occurred when restarting boats. Quitting.')
+                    self.exit_and_cleanup()
         
         if all_alive:
             logging.error('Main Process: SIGCHLD received but all processes are alive.')
@@ -93,7 +100,7 @@ class BoatCluster:
                 signal.signal(signal.SIGCHLD, signal.SIG_DFL)
                 self.exit_and_cleanup()
             
-            except Exception as e:
+            except BaseException as e:
                 logging.error('Main Process: Unexpected exception thrown: {}'.format(e))
 
         # # For any exception (including KeyboardInterrupt)
@@ -117,8 +124,9 @@ class BoatCluster:
             for p in self.processes:
                 try:
                     p.join()
-                finally:
-                    self.processes.remove(p) 
+                except AssertionError:
+                    logging.error('Main Process: Process {} not joinable.'.format(p))
+                self.processes.remove(p) 
 
         logging.info('Main Process: All boats terminated. Please wait for cleanup. This may take several minutes.')
         cleanup_success = 0
