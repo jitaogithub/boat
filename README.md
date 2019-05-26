@@ -77,8 +77,16 @@ To quit, send `ctrl-c` to the console. Boat will automatially clean up all the d
 
 ```shell
 chmod u+x reset.sh
-./reset.sh
+# Need to specify which Clipper instance to reset
+./reset.sh NODE_ID
 ```
 
 ## Advanced Application
 Each module in Boat is highly cohesive. Clipper is essentially independent from Raft. To deploy complex models, you may modify `clipper.py` following the [documentation of Clipper](http://docs.clipper.ai/en/latest/model_deployers.html).
+
+## Failure and recovery
+Boat instances automatically restarts on failure. The requests will be automatically synchronized from living nodes and replayed. For evaluation purposes, an API is implemented for active failure of nodes. For example, to fail Boat 2, simply execute:
+
+`curl -X POST -d '{ "cmd": "exit" }' --header "Content-Type:application/json" 127.0.0.1:8082/control`
+
+It will restart after finishing the clean-up.
