@@ -33,3 +33,17 @@ class AtomicQueue:
         val = not self.queue
         self.cond.release()
         return val
+
+class AtomicDict:
+    def __init__(self):
+        self.data = dict()
+        self.lock = asyncio.Lock()
+        
+    async def has(self, key):
+        async with self.lock:
+            return (key in self.data)
+    
+    async def set(self, key, value):
+        async with self.lock:
+            self.data[key] = value
+

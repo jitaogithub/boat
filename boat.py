@@ -1,16 +1,16 @@
 
 import asyncio
-from datetime import datetime
 import os
-import raftos
 import logging
 import aiohttp
 import json
+import multiprocessing
+from datetime import datetime
 
+import raftos
 from rest_api import BoatAPI
-from atomic_queue import AtomicQueue
+from atomic import AtomicQueue, AtomicDict
 
-import os, multiprocessing
 
 class Boat:
     def __init__(self, num_nodes, node_id, start_time): 
@@ -18,6 +18,10 @@ class Boat:
         self.num_nodes = num_nodes
         self.node_id = node_id
         self.start_time = start_time
+
+        # RaftOS can perform callbacks for the same request
+        # So we add a time -> request dict for quick replicate lookup
+        self.registry = AtomicDict()
 
         # Submitted requests via Rest API
         # self.api_queue -> [{'time': str, 'request': str}]
@@ -34,13 +38,14 @@ class Boat:
         self.raft_node = '127.0.0.1:{}'.format(8000+self.node_id)
         self.raft_cluster = ['127.0.0.1:{}'.format(8000+i) for i in range(num_nodes) if i != self.node_id]
 
-        timestamp = start_time.strftime('%Y-%m-%d-%H-%M-%S')
+        self.timestamp = start_time.strftime('%Y-%m-%d-%H-%M-%S')
         
+        self.log_dir = './logs/{}'.format(self.timestamp)
         os.makedirs('./logs', exist_ok=True)
-        os.makedirs('./logs/{}'.format(timestamp), exist_ok=True)
-        
+        os.makedirs(self.log_dir, exist_ok=True)
+
         raftos.configure({
-            'log_path': './logs/{}'.format(timestamp),
+            'log_path': self.log_dir,
             'serializer': raftos.serializers.JSONSerializer,
             'on_receive_append_entries_callback': self.on_receive_append_entries_callback
         })
@@ -83,7 +88,7 @@ class Boat:
                 try:
                     await data_list.append(r)
                     logging.info('Boat {}: Request from API appended to state: {}'.format(self.node_id, r))
-                    await self.clipper_queue.enqueue_and_notify(r['request'])
+                    await self.predict_handler(r)
                 except:
                     logging.error('Boat {}: Failed to append to state: {}'.format(self.node_id, r))
         
@@ -99,9 +104,20 @@ class Boat:
             # Update from leader received
             logging.info('Boat {}: Request received from raft: {}'.format(self.node_id, command['requests'][-1]))
             # Send to Clipper
-            self.loop.create_task(self.clipper_queue.enqueue_and_notify(command['requests'][-1]['request']))
+            self.loop.create_task(self.predict_handler(command['requests'][-1]))
         else:
             logging.error('Boat {}: Update from raft received with invalid format'.format(self.node_id))
+
+    # Unified interface before requests being sent to prediction no matter it comes from because we need to check replication
+    # r -> { 'time': str, 'request': str }
+    async def predict_handler(self, r):
+        # if type(r) == dict and 'time' in r and 'request' in r and type(r['time']) == type(r['request']) == str:
+        if await self.registry.has(r['time']):
+            logging.info('Boat {}: Replicated request {} abandoned.'.format(self.node_id, r))
+            return
+
+        await self.registry.set(r['time'], r['request'])
+        await self.clipper_queue.enqueue_and_notify(r['request'])
 
     # Coroutine that gets from Clipper queue and send to Clipper
     async def clipper_feeder(self):
@@ -134,6 +150,16 @@ class Boat:
         if 'cmd' in req_dict:
             if req_dict['cmd'] == 'exit':
                 logging.info('Boat {}: Exit command received. Killing myself.'.format(self.node_id))
+                # Clean up storage to simulate a failure
+                files = os.listdir(self.log_dir)
+                for file in files:
+                    if '_'.join(self.raft_node.split(':')) in file:
+                        full_path = os.path.join(self.log_dir, file)
+                        logging.info('Boat {}: Removing from disk {}'.format(self.node_id, full_path))
+                        try:
+                            os.remove(full_path)
+                        except:
+                            logging.info('Boat {}: Error occurred while removing {}'.format(self.node_id, full_path))
                 os.kill(os.getpid(), 9)
         raise Exception()
         
