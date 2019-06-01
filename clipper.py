@@ -1,11 +1,6 @@
 from clipper_admin.deployers import python as python_deployer
 from clipper_admin import ClipperConnection, DockerContainerManager
-
 import argparse
-
-# Simple model: echo the input
-def echo_model(x):
-    return x
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -34,10 +29,10 @@ if __name__ == "__main__":
         clipper_conn.start_clipper()
         clipper_conn.register_application(name="default", input_type="string", default_output="", slo_micros=100000)
 
-        python_deployer.deploy_python_closure(clipper_conn, name="echo-model", version=1, input_type="string", func=echo_model)
-        clipper_conn.link_model_to_app(app_name="default", model_name="echo-model")
+        clipper_conn.register_model(name="image-model", version="1", input_type="string", image="yourimage")
+      
+        clipper_conn.link_model_to_app(app_name="default", model_name="image-model")
     except:
         exit(1)
 
     exit(0)
-
