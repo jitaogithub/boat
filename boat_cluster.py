@@ -84,8 +84,9 @@ class BoatCluster:
                 self.processes.append(p)
                 logging.info('Main Process: ... Boat {} created and triggered.'.format(i))
 
-        except:
+        except Exception as e:
             logging.fatal('Main Process: Error occurred when starting boats. Quitting.')
+            logging.fatal(str(e))
             self.exit_and_cleanup()
 
         # Running loop
