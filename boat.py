@@ -7,6 +7,8 @@ import json
 import multiprocessing
 from datetime import datetime
 
+import time
+
 import raftos
 from rest_api import BoatAPI
 from atomic import AtomicQueue, AtomicDict
@@ -124,11 +126,14 @@ class Boat:
         while True:
             r = await self.clipper_queue.wait_and_dequeue()
             async with aiohttp.ClientSession() as session:
+                start = time.time()
                 async with session.post('http://127.0.0.1:{}/default/predict'.format(1337+self.node_id), 
                     headers={'Content-Type': 'application/json'}, data=r.encode()) as resp:
+
+                    end = time.time()
                     
-                    logging.info('Boat {}: {} sent to clipper with status {} and response:\n\t{}'.format(
-                        self.node_id, r, resp.status, await resp.text()))
+                    logging.info('Boat {}: {} sent to clipper with status {} and response:\n\t{} \n\t Execution time: {}'.format(
+                        self.node_id, r, resp.status, await resp.text(), end-start))
 
     # API handler
     async def get_status(self):
